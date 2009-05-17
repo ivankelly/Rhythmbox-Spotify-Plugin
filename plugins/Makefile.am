@@ -57,6 +57,11 @@ if ENABLE_FM_RADIO
 SUBDIRS += fmradio
 endif
 
+if WITH_SPOTIFY
+SUBDIRS += rbspotify
+endif
+
+
 noinst_LTLIBRARIES = librbplugins.la
 
 librbplugins_la_SOURCES =				\

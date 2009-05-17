@@ -505,6 +505,18 @@ AC_SUBST(LIBSEXY_CFLAGS)
 AC_SUBST(LIBSEXY_LIBS)
 AM_CONDITIONAL(WITH_INTERNAL_LIBSEXY, test "x$with_internal_libsexy" = "xyes")
 
+AC_ARG_WITH(spotify,
+            AC_HELP_STRING([--with-spotify],
+			   [Build with spotify support]),,
+	      with_spotify=no)
+if test "x$with_spotify" = "xyes"; then
+	PKG_CHECK_MODULES(LIBSPOTIFY, libspotify >= 0.0.0,
+		          with_internal_libspotify=yes,
+		          with_internal_libspotify=no)
+fi
+AC_SUBST(LIBSPOTIFY_CFLAGS)
+AC_SUBST(LIBSPOTIFY_LIBS)
+AM_CONDITIONAL(WITH_SPOTIFY, test "x$with_spotify" = "xyes")
 
 dnl warnings bits, copied from gnome-keyring configure.in
 dnl Turn on the additional warnings last, so -Werror doesn't affect other tests.
@@ -799,6 +811,7 @@ sources/Makefile
 corelib/Makefile
 plugins/Makefile
 plugins/sample/Makefile
+plugins/rbspotify/Makefile
 plugins/audiocd/Makefile
 plugins/coherence/Makefile
 plugins/coherence/upnp_coherence/Makefile
@@ -917,12 +930,15 @@ if test x"$use_gnome_keyring" = xyes; then
 else
 	AC_MSG_NOTICE([   gnome-keyring support disabled])
 fi
-if test x"$need_libsexy" = xyes; then
-	if test x"$with_internal_libsexy" = xyes; then
-		AC_MSG_NOTICE([   using internal libsexy])
-	else
-		AC_MSG_NOTICE([** using system-wide libsexy])
-	fi
+if test x"$with_internal_libsexy" = xyes; then
+	AC_MSG_NOTICE([   using internal libsexy])
+else
+	AC_MSG_NOTICE([** using system-wide libsexy])
+fi
+if test x"$with_spotify" = xyes; then
+	AC_MSG_NOTICE([** Spotify support enabled])
+else
+	AC_MSG_NOTICE([   Spotify support disabled])
 fi
 if test "x$enable_fm_radio" != xno; then
 	AC_MSG_NOTICE([** FM radio support enabled])

@@ -85,6 +85,9 @@ G_BEGIN_DECLS
 #define CONF_PLAYER_TRANSITION_TIME 	CONF_PREFIX "/player/transition_time"
 #define CONF_PLAYER_NETWORK_BUFFER_SIZE	CONF_PREFIX "/player/network_buffer_size"
 
+#define CONF_SPOTIFY_USERNAME           CONF_PREFIX "/spotify/username"
+#define CONF_SPOTIFY_PASSWORD           CONF_PREFIX "/spotify/password"
+
 G_END_DECLS
 
 #endif /* __RB_PREFERENCES_H */
