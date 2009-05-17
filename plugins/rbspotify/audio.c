@@ -7,6 +7,7 @@ void audio_fifo_init(audio_fifo_t *af)
 	af->end = 0;
 	
 	pthread_mutex_init(&af->mutex, NULL);
+	pthread_mutex_init(&af->cond_mutex, NULL);
 	pthread_cond_init(&af->cond, NULL);
 }
 

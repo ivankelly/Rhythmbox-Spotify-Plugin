@@ -64,9 +64,9 @@ extern const char g_appkey[];
 extern const size_t g_appkey_size;
 
 /// Synchronization mutex for the main thread
-static pthread_mutex_t g_notify_mutex;
-/// Synchronization condition variable for the main thread
-static pthread_cond_t g_notify_cond;
+pthread_mutex_t g_notify_mutex;
+// Synchronization condition variable for the main thread
+pthread_cond_t g_notify_cond;
 static int g_notify_do;
 
 audio_fifo_t g_audio_fifo;
@@ -76,7 +76,7 @@ audio_fifo_t g_audio_fifo;
  */
 static void spcb_logged_in(sp_session *sess, sp_error error);
 static void spcb_notify_main_thread(sp_session *sess);
-static int spcb_music_delivery(sp_session *sess, const sp_audioformat *format, const void *frames, int num_frames);
+extern int spcb_music_delivery(sp_session *sess, const sp_audioformat *format, const void *frames, int num_frames);
 static void spcb_metadata_updated(sp_session *sess);
 static void spcb_play_token_lost(sp_session *sess);
 static void spcb_connection_error(sp_session *session, sp_error error);
@@ -404,46 +404,6 @@ void spcb_notify_main_thread(sp_session *sess)
      pthread_mutex_unlock(&g_notify_mutex);
 }
 
-int spcb_music_delivery(sp_session *sess, const sp_audioformat *format, const void *frames, int num_frames)
-{
-     audio_fifo_t *af = &g_audio_fifo;
-     int16_t* samples = (int16_t*)frames;
-     int copy_size = 0;
-
-     int frames_consumed = 0;
-     
-     if (num_frames == 0) {
-	  pthread_mutex_lock(&g_notify_mutex);
-	  pthread_cond_signal(&g_notify_cond);
-	  pthread_mutex_unlock(&g_notify_mutex);
-	  
-	  return 0;
-     }
-
-     af->rate = format->sample_rate;
-     af->channels = format->channels;
-     pthread_mutex_lock(&af->mutex);     
-     /* Buffer one second of audio */
-     while (num_frames > 0 && (af->nsamples*format->channels) < RING_QUEUE_SIZE)
-     {
-	  copy_size = MIN(RING_QUEUE_SIZE - af->end, num_frames*format->channels);
-
-	  memcpy(&af->samples[af->end], samples, copy_size*sizeof(int16_t));
-
-	  af->end = (af->end + copy_size) % RING_QUEUE_SIZE;
-	  af->nsamples += copy_size/format->channels;
-
-	  samples += copy_size;
-	  num_frames -= copy_size/format->channels;
-	  frames_consumed += copy_size/format->channels;
-     }
-
-//     fprintf(stderr,"start: %d end: %d frames: %d samples: %d\n", af->start, af->end, frames_consumed, frames_consumed*2);
-     pthread_cond_signal(&af->cond);
-     pthread_mutex_unlock(&af->mutex);
-     
-     return frames_consumed;
-}
 
 void spcb_metadata_updated(sp_session *sess)
 {

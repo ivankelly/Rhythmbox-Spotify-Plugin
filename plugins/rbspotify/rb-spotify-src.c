@@ -147,6 +147,12 @@ static gboolean rbspotifysrc_get_size (GstBaseSrc *src, guint64 *size);
 static gboolean rbspotifysrc_do_seek (GstBaseSrc *src, GstSegment *segment);
 static GstFlowReturn rbspotifysrc_create (GstPushSrc *psrc, GstBuffer **outbuf);
 
+extern pthread_mutex_t g_notify_mutex;
+// Synchronization condition variable for the main thread
+extern pthread_cond_t g_notify_cond;
+
+int spcb_music_delivery(sp_session *sess, const sp_audioformat *format, const void *frames, int num_frames);
+
 void
 rbspotifysrc_set_plugin (RBPlugin *plugin)
 {
@@ -338,7 +344,7 @@ rbspotifysrc_create (GstPushSrc *psrc, GstBuffer **outbuf)
 	RBSpotifySrc *src;
 	size_t readsize = 1000;
 	GstBuffer *buf = NULL;
-	int err;
+	int err, offset = 0;
 	
 	src = RBSPOTIFYSRC (psrc);
 	fprintf(stderr, "create\n");
@@ -368,12 +374,14 @@ rbspotifysrc_create (GstPushSrc *psrc, GstBuffer **outbuf)
 
 	audio_fifo_t *af = &g_audio_fifo;	
 
-	while (af->nsamples == 0 && src->curoffset < src->size)
-	{
+//	if (af->nsamples == 0 && src->curoffset < src->size)
+//	{
 		fprintf(stderr, "samples: %d  curoffset: %lld  size: %lld\n", af->nsamples,
 			(unsigned long long)src->curoffset, (unsigned long long)src->size);
-		sleep(1);
-	}
+		pthread_mutex_lock(&af->cond_mutex);
+		pthread_cond_wait(&af->cond, &af->cond_mutex);
+		pthread_mutex_unlock(&af->cond_mutex);
+//	}
 
 	src->caps = gst_caps_new_simple ("audio/x-raw-int",
 					 "rate", G_TYPE_INT, af->rate,
@@ -400,12 +408,14 @@ rbspotifysrc_create (GstPushSrc *psrc, GstBuffer **outbuf)
 	GST_BUFFER_SIZE (buf) = af->nsamples*af->channels*sizeof(int16_t);
 	src->curoffset = src->curoffset + (af->nsamples*af->channels*sizeof(int16_t));
 //	GST_BUFFER_DURATION(buf) = gst_util_uint64_scale_int(GST_SECOND, af->nsamples, af->rate);
+
 	
 	while (af->nsamples > 0)
 	{
 		int ncopy = MIN(RING_QUEUE_SIZE - af->start, af->nsamples * af->channels);
-		memcpy(GST_BUFFER_DATA(buf), &af->samples[af->start], ncopy*sizeof(int16_t));
-		
+		memcpy(buf->data+offset, &af->samples[af->start], ncopy*sizeof(int16_t));
+
+		offset += ncopy*sizeof(int16_t);
 		af->nsamples -= ncopy/af->channels;
 		af->start = (af->start + ncopy) % RING_QUEUE_SIZE;
 	}
@@ -523,4 +533,52 @@ rbspotifysrc_uri_handler_init (gpointer g_iface,
 	iface->get_protocols = rbspotifysrc_uri_get_protocols;
 	iface->get_uri = rbspotifysrc_uri_get_uri;
 	iface->set_uri = rbspotifysrc_uri_set_uri;
+}
+
+int spcb_music_delivery(sp_session *sess, const sp_audioformat *format, const void *frames, int num_frames)
+{
+     audio_fifo_t *af = &g_audio_fifo;
+     int16_t* samples = (int16_t*)frames;
+     int copy_size = 0;
+
+     int frames_consumed = 0;
+     
+     if (num_frames == 0) {
+	  pthread_mutex_lock(&g_notify_mutex);
+	  pthread_cond_signal(&g_notify_cond);
+	  pthread_mutex_unlock(&g_notify_mutex);
+	  
+	  return 0;
+     }
+     if ((af->nsamples*format->channels) == RING_QUEUE_SIZE)
+	     return 0;
+
+     af->rate = format->sample_rate;
+     af->channels = format->channels;
+     pthread_mutex_lock(&af->mutex);     
+     /* Buffer one second of audio */
+     while (num_frames > 0 && (af->nsamples*format->channels) < RING_QUEUE_SIZE)
+     {
+	  copy_size = MIN(RING_QUEUE_SIZE - af->end, num_frames*format->channels);
+
+	  memcpy(&af->samples[af->end], samples, copy_size*sizeof(int16_t));
+
+	  af->end = (af->end + copy_size) % RING_QUEUE_SIZE;
+	  af->nsamples += copy_size/format->channels;
+
+	  samples += copy_size;
+	  num_frames -= copy_size/format->channels;
+	  frames_consumed += copy_size/format->channels;
+     }
+
+     fprintf(stderr,"start: %d end: %d frames: %d samples: %d\n", af->start, af->end, frames_consumed, frames_consumed*2);
+     if ((af->nsamples*format->channels) > (RING_QUEUE_SIZE/2)) {
+	  pthread_mutex_lock(&af->cond_mutex);
+	  pthread_cond_signal(&af->cond);
+	  pthread_mutex_unlock(&af->cond_mutex);
+     }
+     
+     pthread_mutex_unlock(&af->mutex);
+     
+     return frames_consumed;
 }

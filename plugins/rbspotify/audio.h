@@ -32,7 +32,8 @@
 #include <sys/queue.h>
 
 
-#define RING_QUEUE_SIZE (44100*2)
+#define RING_QUEUE_SIZE (44100*5)
+
 typedef struct audio_fifo {
      int16_t samples[RING_QUEUE_SIZE];
      int nsamples;
@@ -42,6 +43,7 @@ typedef struct audio_fifo {
      int channels;
      pthread_mutex_t mutex;
      pthread_cond_t cond;
+     pthread_mutex_t cond_mutex;
 } audio_fifo_t;
 
 
