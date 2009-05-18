@@ -30,6 +30,7 @@
 
 #include "config.h"
 
+#include <sys/time.h>
 #include <string.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -373,14 +374,24 @@ rbspotifysrc_create (GstPushSrc *psrc, GstBuffer **outbuf)
 	}
 
 	audio_fifo_t *af = &g_audio_fifo;	
+	struct timeval now;
+	struct timespec timeout;
 
 //	if (af->nsamples == 0 && src->curoffset < src->size)
 //	{
-		fprintf(stderr, "samples: %d  curoffset: %lld  size: %lld\n", af->nsamples,
-			(unsigned long long)src->curoffset, (unsigned long long)src->size);
-		pthread_mutex_lock(&af->cond_mutex);
-		pthread_cond_wait(&af->cond, &af->cond_mutex);
-		pthread_mutex_unlock(&af->cond_mutex);
+	fprintf(stderr, "samples: %d  curoffset: %lld  size: %lld\n", af->nsamples,
+		(unsigned long long)src->curoffset, (unsigned long long)src->size);
+	pthread_mutex_lock(&af->cond_mutex);
+	gettimeofday(&now, NULL);
+	timeout.tv_sec = now.tv_sec + 5;
+	timeout.tv_nsec = now.tv_usec * 1000;
+
+	pthread_cond_timedwait(&af->cond, &af->cond_mutex, &timeout);
+	pthread_mutex_unlock(&af->cond_mutex);
+
+	if (af->nsamples == 0) {
+		return GST_FLOW_UNEXPECTED;
+	}
 //	}
 
 	src->caps = gst_caps_new_simple ("audio/x-raw-int",
